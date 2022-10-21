@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Ardalis.GuardClauses" Version="4.0.1" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.1" />
     <PackageReference Include="NetCord" Version="1.0.0-alpha.105" />
     <PackageReference Include="NetCord.Services" Version="1.0.0-alpha.37" />

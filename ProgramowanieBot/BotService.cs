@@ -1,115 +1,40 @@
-﻿using System.Text;
-using System.Text.Json;
-
-using Microsoft.Extensions.Configuration;
+﻿using Ardalis.GuardClauses;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-
-using NetCord;
-using NetCord.Gateway;
-using NetCord.Rest;
+using ProgramowanieBot.Handlers;
 
 namespace ProgramowanieBot;
 
-internal class BotService
+internal class BotService : IHostedService
 {
-    public GatewayClient Client { get; }
-
     private readonly ILogger _logger;
-    private readonly Snowflake _forumChannelId;
-    private readonly IReadOnlyDictionary<Snowflake, Snowflake> _forumTagsRoles;
-    private readonly string _forumPostStartMessage;
+    private readonly IHandler[] _handlers;
 
-    public BotService(ILogger<BotService> logger, TokenService tokenService, IConfiguration configuration)
+    public BotService(ILogger<BotService> logger, ITokenService tokenService, IEnumerable<IHandler> handlers)
     {
-        _logger = logger;
-        _forumChannelId = new(configuration.GetRequiredSection("ForumChannelId").Value);
-        _forumTagsRoles = configuration.GetRequiredSection("ForumTagsRoles").Get<IReadOnlyDictionary<string, string>>().ToDictionary(x => new Snowflake(x.Key), x => new Snowflake(x.Value));
-        _forumPostStartMessage = configuration["ForumPostStartMessage"];
+        Guard.Against.Null(logger);
+        Guard.Against.Null(tokenService);
+        Guard.Against.NullOrEmpty(handlers);
 
-        Client = new(tokenService.Token, new()
-        {
-            Intents = GatewayIntent.Guilds | GatewayIntent.GuildUsers | GatewayIntent.GuildPresences,
-        });
-        Client.Log += message =>
-        {
-            _logger.Log(message.Severity switch
-            {
-                LogSeverity.Info => LogLevel.Information,
-                LogSeverity.Error => LogLevel.Error,
-                _ => LogLevel.Warning
-            }, "{message} {description}", message.Message, message.Description ?? string.Empty);
-            return default;
-        };
-        Client.GuildThreadCreate += HandleThreadCreateAsync;
+        _logger = logger;
+        _handlers = handlers.ToArray();
     }
 
-    private async ValueTask HandleThreadCreateAsync(GuildThreadCreateEventArgs args)
+    public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (args.NewlyCreated && args.Thread is PublicGuildThread thread && thread.ParentId == _forumChannelId)
+        _logger.LogInformation("Starting event handlers");
+        foreach (var handler in _handlers)
         {
-            var appliedTags = thread.AppliedTags;
-            if (appliedTags != null)
-            {
-                Snowflake roleId = default;
-                if (appliedTags.Any(t => _forumTagsRoles.TryGetValue(t, out roleId)))
-                {
-                    var message = await SendStartMessageAsync($"{_forumPostStartMessage}\nPing: <@&{roleId}>");
+            await handler.StartAsync(cancellationToken);
+        }
+    }
 
-                    if (message.Flags.HasFlag(MessageFlags.FailedToMentionSomeRolesInThread) && Client.Guilds.TryGetValue(args.Thread.GuildId, out var guild))
-                    {
-                        StringBuilder stringBuilder = new(2000, 2000);
-                        List<Task> tasks = new(1);
-                        foreach (var user in guild.Users.Values.Where(u => u.RoleIds.Contains(roleId)))
-                        {
-                            var mention = user.ToString();
-                            if (stringBuilder.Length + mention.Length > 2000)
-                            {
-                                tasks.Add(SendAndDeleteMessageAsync(stringBuilder.ToString()));
-                                stringBuilder.Clear();
-                            }
-                            stringBuilder.Append(mention);
-                        }
-                        if (stringBuilder.Length != 0)
-                            tasks.Add(SendAndDeleteMessageAsync(stringBuilder.ToString()));
-
-                        await Task.WhenAll(tasks);
-
-                        async Task SendAndDeleteMessageAsync(string content)
-                        {
-                            var message = await thread.SendMessageAsync(content);
-                            try
-                            {
-                                await message.DeleteAsync();
-                            }
-                            catch
-                            {
-                            }
-                        }
-                    }
-                }
-                else
-                    await SendStartMessageAsync(_forumPostStartMessage);
-
-                async Task<RestMessage> SendStartMessageAsync(MessageProperties messageProperties)
-                {
-                    RestMessage message;
-                    while (true)
-                    {
-                        try
-                        {
-                            message = await thread.SendMessageAsync(messageProperties);
-                            break;
-                        }
-                        catch (RestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Forbidden)
-                        {
-                            if ((await JsonDocument.ParseAsync(await ex.ResponseContent.ReadAsStreamAsync())).RootElement.GetProperty("code").GetInt32() != 40058)
-                                throw;
-                        }
-                    }
-                    return message;
-                }
-            }
+    public async Task StopAsync(CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Stopping event handlers");
+        foreach (var handler in _handlers)
+        {
+            await handler.StopAsync(cancellationToken);
         }
     }
 }
