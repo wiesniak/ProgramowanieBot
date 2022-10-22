@@ -31,7 +31,7 @@ namespace ProgramowanieBot.Handlers
         public async Task StopAsync(CancellationToken cancellationToken)
         {
             await StopHandlerAsync(cancellationToken);
-            await Client.StartAsync();
+            await Client.CloseAsync();
         }
     }
 }
