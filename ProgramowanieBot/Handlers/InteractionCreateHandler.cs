@@ -7,10 +7,8 @@ using NetCord.Services.ApplicationCommands;
 
 namespace ProgramowanieBot.Handlers;
 
-internal class InteractionCreateHandler : IHandler
+internal class InteractionCreateHandler : BaseHandler
 {
-    private readonly ILogger<InteractionCreateHandler> _logger;
-    private readonly GatewayClient _client;
     private readonly ApplicationCommandService<SlashCommandContext> _applicationCommandService;
     private readonly ITokenService _tokenService;
 
@@ -19,52 +17,49 @@ internal class InteractionCreateHandler : IHandler
         GatewayClient discordClient,
         ApplicationCommandService<SlashCommandContext> applicationCommandService,
         ITokenService tokenService)
+        : base(logger, discordClient)
     {
-        Guard.Against.Null(logger);
-        Guard.Against.Null(discordClient);
         Guard.Against.Null(applicationCommandService);
         Guard.Against.Null(tokenService);
 
-        _logger = logger;
-        _client = discordClient;
         _applicationCommandService = applicationCommandService;
         _tokenService = tokenService;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    protected override async Task StartHandlerAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Registering application commands");
+        Logger.LogInformation("Registering application commands");
         _applicationCommandService.AddModules(Assembly.GetEntryAssembly()!);
 
-        var list = await _applicationCommandService.CreateCommandsAsync(_client.Rest, _tokenService.Token.Id);
-        _logger.LogInformation("{count} command(s) successfully registered", list.Count);
+        var commands = await _applicationCommandService.CreateCommandsAsync(Client.Rest, _tokenService.Id);
+        Logger.LogInformation("{count} command(s) successfully registered", commands.Count);
 
-        _client.InteractionCreate += HandleInteractionAsync;
+        Client.InteractionCreate += HandleInteractionAsync;
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    protected override Task StopHandlerAsync(CancellationToken cancellationToken)
     {
-        _client.InteractionCreate -= HandleInteractionAsync;
+        Client.InteractionCreate -= HandleInteractionAsync;
         return Task.CompletedTask;
     }
 
     private async ValueTask HandleInteractionAsync(Interaction interaction)
     {
-        _logger.LogInformation("Starting handling new event");
+        Logger.LogInformation("Starting handling new event");
         try
         {
             await (interaction switch
             {
-                SlashCommandInteraction slashCommandInteraction => _applicationCommandService.ExecuteAsync(new(slashCommandInteraction, _client)),
+                SlashCommandInteraction slashCommandInteraction => _applicationCommandService.ExecuteAsync(new(slashCommandInteraction, Client)),
                 _ => throw new InvalidOperationException($"Invalid interaction {interaction?.GetType()}."),
             });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Interaction handling failed");
+            Logger.LogError(ex, "Interaction handling failed");
             try
             {
-                _logger.LogDebug("Trying to send interaction failure message");
+                Logger.LogDebug("Trying to send interaction failure message");
                 await interaction.SendResponseAsync(InteractionCallback.ChannelMessageWithSource(new()
                 {
                     Content = $"<a:nie:881595378070343710> {ex.Message}",
@@ -73,10 +68,10 @@ internal class InteractionCreateHandler : IHandler
             }
             catch (Exception innerEx)
             {
-                _logger.LogError(innerEx, "Failed to send interaction failure message");
+                Logger.LogError(innerEx, "Failed to send interaction failure message");
             }
         }
 
-        _logger.LogInformation("Finished handling event");
+        Logger.LogInformation("Finished handling event");
     }
 }
