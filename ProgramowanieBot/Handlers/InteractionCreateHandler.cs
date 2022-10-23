@@ -31,7 +31,7 @@ internal class InteractionCreateHandler : BaseHandler
         Logger.LogInformation("Registering application commands");
         _applicationCommandService.AddModules(Assembly.GetEntryAssembly()!);
 
-        var commands = await _applicationCommandService.CreateCommandsAsync(Client.Rest, _tokenService.Id);
+        var commands = await _applicationCommandService.CreateCommandsAsync(Client.Rest, _tokenService.Token.Id);
         Logger.LogInformation("{count} command(s) successfully registered", commands.Count);
 
         Client.InteractionCreate += HandleInteractionAsync;

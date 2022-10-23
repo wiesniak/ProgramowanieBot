@@ -48,8 +48,8 @@ internal class GuildThreadCreateHandler : BaseHandler
         }
 
         var appliedTags = thread.AppliedTags;
-        Snowflake roleId = default;
-        if (appliedTags.Any(t => _options.ForumStartingPost.ForumTagsRoles!.TryGetValue(t, out var roleId)))
+        ulong roleId = default;
+        if (appliedTags.Any(t => _options.ForumStartingPost.ForumTagsRoles!.TryGetValue(t, out roleId)))
         {
             var message = await SendStartMessageAsync(thread, $"{_options.ForumStartingPost.Message}\nPing: <@&{roleId}>");
 

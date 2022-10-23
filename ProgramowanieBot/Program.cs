@@ -68,26 +68,25 @@ public static class Program
 
     private static void ConfigureOptions(HostBuilderContext context, IServiceCollection services)
     {
-        var authOptions = new AuthOptions();
-        context.Configuration.GetSection(AuthOptions.SectionPath)
-                         .Bind(authOptions);
-
-        var guildThreadCreateOptions = new GuildThreadCreateOptions();
-        context.Configuration.GetSection(GuildThreadCreateOptions.SectionPath)
-                         .Bind(guildThreadCreateOptions);
-
         services.Configure<AuthOptions>(context.Configuration.GetSection(AuthOptions.SectionPath));
         services.Configure<GuildThreadCreateOptions>(
             options =>
             {
-                var forumStartingPostSection = context.Configuration.GetSection(GuildThreadCreateOptions.SectionPath).GetSection(nameof(GuildThreadCreateOptions.ForumStartingPost));
+                try
+                {
+                    var forumStartingPostSection = context.Configuration.GetSection(GuildThreadCreateOptions.SectionPath).GetSection(nameof(GuildThreadCreateOptions.ForumStartingPost));
 
-                options.ForumStartingPost = forumStartingPostSection.Get<ForumStartingPost>();
-                options.ForumStartingPost.ForumChannelId = new Snowflake(forumStartingPostSection.GetValue<string>(nameof(ForumStartingPost.ForumChannelId)));
-                options.ForumStartingPost.ForumTagsRoles = 
-                    forumStartingPostSection
-                    .GetSection(nameof(ForumStartingPost.ForumTagsRoles)).Get<Dictionary<string, string>>()
-                    .ToDictionary(d => new Snowflake(d.Key), d=> new Snowflake(d.Value));
+                    options.ForumStartingPost = forumStartingPostSection.Get<ForumStartingPost>();
+                    //options.ForumStartingPost.ForumChannelId = new Snowflake(forumStartingPostSection.GetValue<string>(nameof(ForumStartingPost.ForumChannelId)));
+                    options.ForumStartingPost.ForumTagsRoles =
+                        forumStartingPostSection
+                        .GetSection(nameof(ForumStartingPost.ForumTagsRoles)).Get<Dictionary<string, ulong>>()
+                        .ToDictionary(d => ulong.Parse(d.Key), d => d.Value);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("Configuration is malformed.", ex);
+                }
             });
     }
 }
